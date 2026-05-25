@@ -1,43 +1,23 @@
 # job-hunter-agent
 
-An AI agent that automates LinkedIn job searching for graduate roles. It logs into LinkedIn, runs a set of targeted searches, scores each listing against your profile (1–10), saves strong matches to `digest.md`, and emails you the digest when done.
+An AI agent that searches LinkedIn for graduate roles, scores each listing against your profile (1–10), and emails you a digest of the best matches.
 
 ## How it works
 
-```
-run_agent()
-  │
-  ├─ initialize_driver()       Opens a Chrome window
-  ├─ initialize_agent()        Creates a Claude-powered CodeAgent with 4 browser tools
-  │
-  └─ agent.run(HELIUM_INSTRUCTIONS)
-       │
-       ├─ STEP 0: Login        Navigates to linkedin.com/login, fills credentials, verifies /feed
-       │
-       └─ STEP 1 (×12 queries):
-            ├─ Navigate        Builds a filtered search URL (entry-level, last 7 days, London)
-            ├─ Scroll          Loads job cards in the left panel
-            ├─ For each card:
-            │    ├─ Click      Opens job details; URL updates to the job's permalink
-            │    ├─ read_job_description()   Extracts "About the job" section via JS
-            │    ├─ Score      Claude rates 1–10 against CV_SCORING rubric
-            │    └─ Collect    Appends matches (score ≥ 6) to collected_jobs[]
-            └─ save_jobs_to_digest()   Deduplicates against seen_jobs.json, appends to digest.md
-  │
-  └─ send_digest_email()       Emails digest.md via Gmail SMTP
-```
+It opens Chrome, logs into LinkedIn, and runs through a set of search queries. For each result it reads the job description, has Claude score it, and collects anything scoring 6 or above. At the end it saves the matches to `digest.md` and emails it to you.
 
-**Deduplication:** every saved job URL is hashed (MD5) and stored in `seen_jobs.json` with a timestamp. Jobs are suppressed for 90 days, so daily runs don't produce duplicates.
+A few things worth knowing:
 
-**Token management:** after each agent step, the screenshot callback prunes `llm_output`, `action_output`, and `observations` from steps older than the last two. This keeps the context window flat regardless of how many steps the agent takes.
+- **Deduplication** — job URLs are hashed and stored in `seen_jobs.json`. Anything seen in the last 90 days is skipped, so daily runs don't repeat themselves.
+- **Context management** — older agent steps are pruned after each iteration to keep the context window from growing unbounded.
 
 ## Prerequisites
 
 - Python 3.11+
-- Google Chrome installed
+- Google Chrome
 - An [Anthropic API key](https://console.anthropic.com/)
 - A LinkedIn account
-- A Gmail account with an [app password](https://myaccount.google.com/apppasswords) for sending email (requires 2-Step Verification)
+- A Gmail account with an [app password](https://myaccount.google.com/apppasswords) (requires 2-Step Verification)
 
 ## Setup
 
@@ -50,24 +30,20 @@ cp .env.example .env  # then fill in your values
 
 ## Environment variables
 
-Create a `.env` file in the project root:
-
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `LINKEDIN_EMAIL` | LinkedIn login email (also the digest recipient) |
+| `LINKEDIN_EMAIL` | LinkedIn login email (also where the digest is sent) |
 | `LINKEDIN_PASSWORD` | LinkedIn password |
 | `GMAIL_SENDER` | Gmail address used to send the digest |
 | `GMAIL_APP_PASSWORD` | 16-char app password for `GMAIL_SENDER` |
 
-> **Gmail app password:** go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create one named anything (e.g. `job-hunter`), and paste the 16-character result. Spaces are fine.
-
 ## Configuration
 
-Edit `config.py` to customise the agent:
+Edit `config.py` to tailor the agent to you:
 
-- **`SEARCH_QUERIES`** — list of LinkedIn search strings. Add, remove, or modify to match what you're looking for.
-- **`CV_SCORING`** — the rubric the agent uses to score each job. Update this to reflect your own skills, target roles, and location preferences.
+- **`SEARCH_QUERIES`** — the LinkedIn search strings to run. Add or remove to match what you're looking for.
+- **`CV_SCORING`** — the rubric Claude uses to score each job. Update it to reflect your skills, target roles, and location.
 - **`RECENCY_DAYS`** — how old listings can be (default: 7 days).
 
 ## Running
@@ -76,7 +52,7 @@ Edit `config.py` to customise the agent:
 python agent.py
 ```
 
-A Chrome window opens. Leave it running — the agent will handle everything and close when done. Results are saved to `digest.md` and emailed to `LINKEDIN_EMAIL`.
+A Chrome window opens — just leave it. The agent handles everything and closes when done. Results go to `digest.md` and your inbox.
 
 ## Scheduling (optional)
 
@@ -89,7 +65,7 @@ python scheduler.py
 
 ## Output
 
-`digest.md` is generated fresh each run. Each matched job looks like:
+Each matched job in `digest.md` looks like:
 
 ```
 ## Software Engineer at Acme AI
@@ -101,4 +77,3 @@ python scheduler.py
 
 2-sentence summary of the role.
 ```
-
